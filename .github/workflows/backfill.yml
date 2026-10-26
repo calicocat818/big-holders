@@ -1,0 +1,31 @@
+name: 補自選股歷史資料
+
+on:
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: '往前補幾週'
+        default: '5'
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 補歷史資料（每檔每週查一次，需要幾分鐘）
+        run: node scripts/backfill.mjs ${{ github.event.inputs.weeks }}
+      - name: 重新計算
+        run: node scripts/update.mjs
+      - name: 存回 GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A data
+          git diff --cached --quiet || git commit -m "補自選股歷史資料 $(date +%F)"
+          git push
