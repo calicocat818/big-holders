@@ -1,0 +1,29 @@
+name: 更新千張大戶資料
+
+on:
+  schedule:
+    # 集保通常週五收盤後更新；台灣時間週六 10:00 抓一次，週一 10:00 再補抓一次
+    - cron: '7 2 * * 6'
+    - cron: '7 2 * * 1'
+  workflow_dispatch:      # 也可以在 Actions 頁面手動按 Run workflow
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 下載並計算
+        run: node scripts/update.mjs
+      - name: 存回 GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A data
+          git diff --cached --quiet || git commit -m "更新千張大戶資料 $(date +%F)"
+          git push

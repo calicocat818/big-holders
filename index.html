@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="千張大戶">
+<title>千張大戶</title>
+<style>
+  :root {
+    --bg: #0b1020; --card: #121a2e; --line: #1f2a44; --text: #e8ecf5; --mute: #8a96b3;
+    --up: #ff5a5f; --up-bg: rgba(255, 90, 95, .14); --down: #2ecc8f; --down-bg: rgba(46, 204, 143, .14);
+    --flat-bg: #1c2742; --tab: #17213a; --tab-on: #0e1528;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    padding: env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom)); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 2px 10px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .5px; }
+  button.reload { background: none; border: 0; color: var(--mute); font-size: 20px; padding: 6px; }
+  .tabs { display: flex; background: var(--tab); border-radius: 14px; padding: 4px; margin: 8px 0 12px; }
+  .tabs button { flex: 1; border: 0; background: none; color: var(--mute); font: inherit; font-weight: 600;
+    padding: 10px 0; border-radius: 10px; }
+  .tabs button.on { background: var(--tab-on); color: var(--text); }
+  .sub { display: none; gap: 8px; margin: -2px 0 12px; }
+  .sub.show { display: flex; }
+  .sub button { border: 1px solid var(--line); background: none; color: var(--mute); border-radius: 999px;
+    padding: 6px 14px; font: inherit; font-size: 13px; }
+  .sub button.on { color: var(--text); border-color: var(--mute); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px 14px; }
+  .title { font-size: 19px; font-weight: 700; margin: 0 0 6px; }
+  .meta { color: var(--mute); font-size: 13px; margin: 2px 0; }
+  .meta b { color: var(--text); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-variant-numeric: tabular-nums; }
+  th { color: var(--mute); font-weight: 500; font-size: 12px; text-align: right; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+  th:first-child { text-align: left; }
+  td { padding: 12px 2px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  td:first-child { text-align: left; white-space: normal; }
+  tr:last-child td { border-bottom: 0; }
+  .name { font-weight: 600; }
+  .code { color: var(--mute); font-size: 12px; margin-left: 4px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+  .b-up { color: var(--up); background: var(--up-bg); }
+  .b-down { color: var(--down); background: var(--down-bg); }
+  .b-flat { color: var(--text); background: var(--flat-bg); }
+  .b-wait { color: var(--mute); background: var(--flat-bg); font-weight: 500; }
+  .up { color: var(--up); } .down { color: var(--down); } .zero { color: var(--mute); }
+  .empty { color: var(--mute); text-align: center; padding: 28px 0 12px; }
+  footer { color: var(--mute); font-size: 12px; margin-top: 14px; line-height: 1.6; }
+  @media (max-width: 360px) { body { font-size: 14px; } .badge { font-size: 11px; padding: 2px 6px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>法人籌碼</h1>
+  <button class="reload" onclick="load()" aria-label="重新整理">⟳</button>
+</header>
+
+<div class="tabs">
+  <button data-tab="mine" class="on">自選</button>
+  <button data-tab="market">全市場</button>
+</div>
+<div class="sub" id="sub">
+  <button data-side="up" class="on">籌碼集中</button>
+  <button data-side="down">籌碼渙散</button>
+</div>
+
+<div class="card">
+  <p class="title">🐋 千張大戶集中度</p>
+  <p class="meta" id="m1">載入中…</p>
+  <p class="meta" id="m2"></p>
+  <p class="meta" id="m3"></p>
+  <table>
+    <thead><tr><th>股票</th><th>判讀</th><th>千張大戶</th><th>1 週</th><th>4 週</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<footer>
+  資料：集保結算所股權分散表（每週更新）。判讀：千張大戶 4 週增加 ≥0.5 個百分點且股東人數未增加為「籌碼集中」，反之為「籌碼渙散」。僅描述籌碼變化，不構成投資建議。
+</footer>
+
+<script>
+let data = null, tab = 'mine', side = 'up';
+const fmtDate = d => d ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : '—';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const sign = v => v == null ? '<span class="zero">—</span>'
+  : `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : 'zero'}">${v > 0 ? '+' : ''}${v.toFixed(2)}</span>`;
+const badge = v => {
+  const cls = { '籌碼集中': 'b-up', '籌碼渙散': 'b-down', '大致持平': 'b-flat' }[v] || 'b-wait';
+  return `<span class="badge ${cls}">${esc(v)}</span>`;
+};
+
+function render() {
+  if (!data) return;
+  document.getElementById('sub').classList.toggle('show', tab === 'market');
+  const list = tab === 'mine' ? data.mine : data.market[side];
+  document.getElementById('m1').innerHTML = `<b>${fmtDate(data.date)}</b> 股權分散`;
+  document.getElementById('m2').textContent =
+    `比較 ${data.w1 ? fmtDate(data.w1) + '（1 週）' : '1 週：尚無'} · ${data.w4 ? fmtDate(data.w4) + '（4 週）' : '4 週：尚無'}`;
+  document.getElementById('m3').textContent = `${list.length} 檔 · 已累積 ${data.weeks} 週`;
+  const body = document.getElementById('rows');
+  if (!list.length) {
+    body.innerHTML = `<tr><td colspan="5" class="empty">${tab === 'market' && !data.w4
+      ? '全市場排行需要累積滿 4 週資料' : '沒有資料'}</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(r => r.missing
+    ? `<tr><td><span class="name">${esc(r.name || r.id)}</span><span class="code">${esc(r.id)}</span></td>
+         <td colspan="4" class="zero">此週無資料</td></tr>`
+    : `<tr><td><span class="name">${esc(r.name || r.id)}</span><span class="code">${esc(r.id)}</span></td>
+         <td>${badge(r.verdict)}</td><td>${r.big.toFixed(2)}%</td><td>${sign(r.d1)}</td><td>${sign(r.d4)}</td></tr>`
+  ).join('');
+}
+
+async function load() {
+  try {
+    const res = await fetch(`data/latest.json?t=${Date.now()}`);
+    if (!res.ok) throw new Error(res.status);
+    data = await res.json();
+    render();
+  } catch (e) {
+    document.getElementById('m1').textContent = '還沒有資料：請先到 GitHub 的 Actions 手動執行一次更新。';
+  }
+}
+
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+document.querySelectorAll('[data-side]').forEach(b => b.onclick = () => {
+  side = b.dataset.side;
+  document.querySelectorAll('[data-side]').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+load();
+</script>
+</body>
+</html>
