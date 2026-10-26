@@ -118,7 +118,8 @@ await mkdir(SNAP, { recursive: true });
 
 const parsed = parse(await getCsv());
 const snapFile = path.join(SNAP, `${parsed.date}.json`);
-if (existsSync(snapFile)) console.log(`${parsed.date} 已存在，只重新計算`);
+const old = existsSync(snapFile) ? JSON.parse(await readFile(snapFile, 'utf8')) : null;
+if (old && !old.partial) console.log(`${parsed.date} 已存在，只重新計算`);
 else { await writeFile(snapFile, JSON.stringify(parsed)); console.log(`新增快照 ${parsed.date}（${Object.keys(parsed.stocks).length} 檔）`); }
 
 // 只保留最近 12 週
@@ -138,11 +139,14 @@ for (const [id, n] of Object.entries(watch.stocks || {})) if (n && !names[id]) n
 const sortBy4w = (x, y) => (y.d4 ?? -1e9) - (x.d4 ?? -1e9) || (y.d1 ?? -1e9) - (x.d1 ?? -1e9);
 const mine = Object.keys(watch.stocks || {}).map(id => row(id, latest, w1, w4, names, '自選')).sort(sortBy4w);
 
+// 全市場只用完整快照（補回來的歷史只有自選股，不能拿來排全市場）
+const full = snaps.filter(s => !s.partial);
+const fw1 = pick(full, latest, 5, 10), fw4 = pick(full, latest, 25, 32);
 let market = { up: [], down: [] };
-if (w4) {
+if (fw4 && !latest.partial) {
   const all = Object.keys(latest.stocks)
     .filter(id => latest.stocks[id][1] >= MARKET_MIN_PEOPLE)
-    .map(id => row(id, latest, w1, w4, names, ''))
+    .map(id => row(id, latest, fw1, fw4, names, ''))
     .filter(r => r.d4 != null);
   market.up = all.filter(r => r.verdict === '籌碼集中').sort(sortBy4w).slice(0, MARKET_TOP);
   market.down = all.filter(r => r.verdict === '籌碼渙散').sort((x, y) => x.d4 - y.d4).slice(0, MARKET_TOP);
@@ -150,7 +154,7 @@ if (w4) {
 
 const out = {
   date: latest.date, w1: w1?.date || null, w4: w4?.date || null,
-  weeks: snaps.length, updatedAt: new Date().toISOString(),
+  weeks: snaps.length, fullWeeks: full.length, marketReady: !!fw4, updatedAt: new Date().toISOString(),
   mine, market,
 };
 await writeFile(path.join(DATA, 'latest.json'), JSON.stringify(out));
