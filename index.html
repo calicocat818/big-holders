@@ -101,10 +101,10 @@ function render() {
   document.getElementById('m1').innerHTML = `<b>${fmtDate(data.date)}</b> 股權分散`;
   document.getElementById('m2').textContent =
     `比較 ${data.w1 ? fmtDate(data.w1) + '（1 週）' : '1 週：尚無'} · ${data.w4 ? fmtDate(data.w4) + '（4 週）' : '4 週：尚無'}`;
-  document.getElementById('m3').textContent = `${list.length} 檔 · 已累積 ${data.weeks} 週`;
+  document.getElementById('m3').textContent = `${list.length} 檔 · 全市場已累積 ${data.fullWeeks ?? data.weeks} 週`;
   const body = document.getElementById('rows');
   if (!list.length) {
-    body.innerHTML = `<tr><td colspan="5" class="empty">${tab === 'market' && !data.w4
+    body.innerHTML = `<tr><td colspan="5" class="empty">${tab === 'market' && !(data.marketReady ?? data.w4)
       ? '全市場排行需要累積滿 4 週資料' : '沒有資料'}</td></tr>`;
     return;
   }
