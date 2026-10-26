@@ -62,13 +62,14 @@
 <div class="tabs">
   <button data-tab="mine" class="on">自選</button>
   <button data-tab="market">全市場</button>
+  <button data-tab="bo">週線突破</button>
 </div>
 <div class="sub" id="sub">
   <button data-side="up" class="on">籌碼集中</button>
   <button data-side="down">籌碼渙散</button>
 </div>
 
-<div class="card">
+<div class="card" id="cardHold">
   <p class="title">🐋 千張大戶集中度</p>
   <p class="meta" id="m1">載入中…</p>
   <p class="meta" id="m2"></p>
@@ -79,12 +80,26 @@
   </table>
 </div>
 
-<footer>
+<div class="card" id="cardBo" style="display:none">
+  <p class="title">🚀 週線突破第一根</p>
+  <p class="meta" id="b1">載入中…</p>
+  <p class="meta" id="b2"></p>
+  <p class="meta" id="b3"></p>
+  <table>
+    <thead><tr><th>股票</th><th>收盤</th><th>高於均線</th><th>本週</th><th>量比</th></tr></thead>
+    <tbody id="brows"></tbody>
+  </table>
+</div>
+
+<footer id="footHold">
   資料：集保結算所股權分散表（每週更新）。判讀：千張大戶 4 週增加 ≥0.5 個百分點且股東人數未增加為「籌碼集中」，反之為「籌碼渙散」。僅描述籌碼變化，不構成投資建議。
+</footer>
+<footer id="footBo" style="display:none">
+  資料：證交所、櫃買中心每日收盤行情。條件：本週收盤站上 26 週均線、上週收盤還在均線下（第一根），本週日均量 ≥ 前 5 週 1.5 倍，日均成交值 ≥ 5,000 萬。週中為「本週至今」的暫時結果，週五收盤後才確定。價格未還原除權息，減資或除權的股票可能誤判。僅供研究，不構成投資建議。
 </footer>
 
 <script>
-let data = null, tab = 'mine', side = 'up';
+let data = null, bo = null, tab = 'mine', side = 'up';
 const fmtDate = d => d ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : '—';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const sign = v => v == null ? '<span class="zero">—</span>'
@@ -94,7 +109,25 @@ const badge = v => {
   return `<span class="badge ${cls}">${esc(v)}</span>`;
 };
 
+const pct = v => `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : 'zero'}">${v > 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+
+function renderBo() {
+  const b1 = document.getElementById('b1'), body = document.getElementById('brows');
+  if (!bo) { b1.textContent = '還沒有資料：請到 GitHub 的 Actions 手動執行「每日週線突破掃描」。'; body.innerHTML = ''; return; }
+  b1.innerHTML = `<b>${fmtDate(bo.date)}</b> 收盤 · 本週第 ${bo.days} 個交易日${bo.days < 5 ? '（週中暫定）' : ''}`;
+  document.getElementById('b2').textContent = `站上 ${bo.rule.maWeeks} 週均線 · 量比 ≥ ${bo.rule.volRatio} · 日均成交值 ≥ ${bo.rule.minValue / 1e8} 億`;
+  document.getElementById('b3').textContent = `掃描 ${bo.scanned} 檔 · 符合 ${bo.list.length} 檔`;
+  body.innerHTML = bo.list.length ? bo.list.map(r => `<tr>
+      <td><span class="name">${esc(r.name || r.id)}</span><span class="code">${esc(r.id)}</span></td>
+      <td>${r.close}</td><td>${pct(r.above)}</td><td>${pct(r.week)}</td><td>${r.vol.toFixed(1)}x</td></tr>`).join('')
+    : '<tr><td colspan="5" class="empty">今天沒有符合條件的股票</td></tr>';
+}
+
 function render() {
+  const isBo = tab === 'bo';
+  for (const [id, show] of [['cardHold', !isBo], ['footHold', !isBo], ['cardBo', isBo], ['footBo', isBo]])
+    document.getElementById(id).style.display = show ? '' : 'none';
+  if (isBo) { document.getElementById('sub').classList.remove('show'); return renderBo(); }
   if (!data) return;
   document.getElementById('sub').classList.toggle('show', tab === 'market');
   const list = tab === 'mine' ? data.mine : data.market[side];
@@ -125,6 +158,11 @@ async function load() {
   } catch (e) {
     document.getElementById('m1').textContent = '還沒有資料：請先到 GitHub 的 Actions 手動執行一次更新。';
   }
+  try {
+    const res = await fetch(`data/breakout.json?t=${Date.now()}`);
+    bo = res.ok ? await res.json() : null;
+  } catch (e) { bo = null; }
+  render();
 }
 
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
